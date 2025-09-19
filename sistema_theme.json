@@ -1,0 +1,92 @@
+{
+  "CTkButton": {
+    "corner_radius": 6,
+    "border_width": 0,
+    "border_color": "#6A1B9A",
+    "fg_color": "#9C27B0",
+    "hover_color": "#7B1FA2",
+    "text_color": "white",
+    "text_color_disabled": ["gray74", "gray60"]
+  },
+  "CTkLabel": {
+    "corner_radius": 0,
+    "fg_color": "transparent",
+    "text_color": "#E1BEE7",
+    "text_color_disabled": ["gray60", "gray45"]
+  },
+  "CTkFrame": {
+    "corner_radius": 6,
+    "border_width": 0,
+    "fg_color": "#2E1B3F",
+    "top_fg_color": "#2E1B3F",
+    "border_color": ["#6A1B9A", "#4A148C"]
+  },
+  "CTkEntry": {
+    "corner_radius": 6,
+    "border_width": 2,
+    "fg_color": "#F3E5F5",
+    "border_color": "#9C27B0",
+    "text_color": "#4A148C",
+    "placeholder_text_color": "gray50"
+  },
+  "CTkComboBox": {
+    "corner_radius": 6,
+    "border_width": 2,
+    "fg_color": "#F3E5F5",
+    "border_color": "#9C27B0",
+    "button_color": "#9C27B0",
+    "button_hover_color": "#7B1FA2",
+    "text_color": "#4A148C",
+    "text_color_disabled": ["gray74", "gray60"],
+    "dropdown_fg_color": "#F3E5F5",
+    "dropdown_hover_color": "#CE93D8"
+  },
+  "CTkScrollbar": {
+    "corner_radius": 1000,
+    "border_spacing": 4,
+    "fg_color": "transparent",
+    "button_color": ["#9C27B0", "#7B1FA2"],
+    "button_hover_color": ["#BA68C8", "#AB47BC"]
+  },
+  "DropdownMenu": {
+    "fg_color": ["#F3E5F5", "#2E1B3F"],
+    "hover_color": ["#CE93D8", "#7B1FA2"],
+    "text_color": ["#4A148C", "#E1BEE7"]
+  },
+  "CTkCheckBox": {
+    "border_color": "#9C27B0",
+    "fg_color": "#9C27B0",
+    "hover_color": "#7B1FA2",
+    "checkmark_color": "white",
+    "text_color": "#E1BEE7",
+    "corner_radius": 6,
+    "border_width": 2,
+    "text_color_disabled": ["#888888", "#888888"]
+  },
+  "CTkScrollableFrame": {
+    "label_fg_color": ["#F3E5F5", "#2E1B3F"],
+    "fg_color": ["#F3E5F5", "#2E1B3F"],
+    "border_color": ["#9C27B0", "#7B1FA2"],
+    "corner_radius": 6
+  },
+  "CTkToplevel": {
+    "fg_color": "#3D3663"
+  },
+  "CTkFont": {
+    "Windows": {
+      "family": "Segoe UI",
+      "size": 13,
+      "weight": "normal"
+    },
+    "macOS": {
+      "family": "SF Display",
+      "size": 13,
+      "weight": "normal"
+    },
+    "Linux": {
+      "family": "Roboto",
+      "size": 13,
+      "weight": "normal"
+    }
+  }
+}
