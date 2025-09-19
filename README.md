@@ -1,10 +1,6 @@
 # Chronomind
 
-<!-- First image -->
-<img src="https://github.com/user-attachments/assets/97bce339-ed09-4aa3-ac3b-de024121cf8a" alt="logo-sistemaplanificacion" style="width:40%; display:block; margin-bottom:20px;"/>
-
-<!-- Second image -->
-<img src="https://github.com/user-attachments/assets/081a2b76-cb55-40fb-8429-3d80cb488da9" alt="chronomind-logoHD" style="width:50%; display:block;"/>
+<img width="1134" height="213" alt="chronomind-logoHD-withMiniLogo" src="https://github.com/user-attachments/assets/44a855e4-fe80-4a8f-bc49-4cdcde6443a8" />
 
 Simulador gráfico de algoritmos de planificación de procesos, orientado a enseñanza, auditoría técnica y validación reproducible de métricas en sistemas operativos.
 
