@@ -1,5 +1,11 @@
 # Chronomind
 
+<!-- First image -->
+<img src="https://github.com/user-attachments/assets/97bce339-ed09-4aa3-ac3b-de024121cf8a" alt="logo-sistemaplanificacion" style="width:40%; display:block; margin-bottom:20px;"/>
+
+<!-- Second image -->
+<img src="https://github.com/user-attachments/assets/081a2b76-cb55-40fb-8429-3d80cb488da9" alt="chronomind-logoHD" style="width:50%; display:block;"/>
+
 Simulador gráfico de algoritmos de planificación de procesos, orientado a enseñanza, auditoría técnica y validación reproducible de métricas en sistemas operativos.
 
 ## Características
@@ -16,6 +22,7 @@ Simulador gráfico de algoritmos de planificación de procesos, orientado a ense
   - Tiempo de Espera (TE)
   - Tiempo de Retorno (TR)
   - Promedios globales
+
 - Acciones rápidas:
   - Nombrado alfabético
   - Randomización de tiempos y patrones
