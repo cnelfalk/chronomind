@@ -55,8 +55,6 @@ class ControlsFrame(ctk.CTkFrame):
         popup.transient(self)
         popup.grab_set()
 
-        popup.after(120, lambda: popup.iconbitmap(self.app.icon_path))
-
         popup.update_idletasks()
         w, h = popup.winfo_width(), popup.winfo_height()
         x = (popup.winfo_screenwidth() // 2) - (w // 2)
@@ -68,6 +66,9 @@ class ControlsFrame(ctk.CTkFrame):
                       command=lambda: [self._rename_processes(), popup.destroy()]).pack(pady=5)
         ctk.CTkButton(popup, text="Randomizar tiempos y patrones",
                       command=lambda: [self._randomize_processes(), popup.destroy()]).pack(pady=5)
+        
+        popup.after(110, lambda: popup.iconbitmap(self.app.icon_path))
+
 
     def _rename_processes(self):
         if hasattr(self.master, "table"):

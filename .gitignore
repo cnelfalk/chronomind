@@ -1,1 +1,8 @@
 /generar_sistema_txt.py
+/sistema_completo.txt
+
+*.pyc
+*.pyo
+*.pyd
+
+__pycache__/

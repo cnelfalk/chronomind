@@ -4,21 +4,32 @@ from ..core.models import Process, ScheduleResult, ExecSlice
 
 class SRTF(SchedulerStrategy):
     """
-    Preemptive Shortest Remaining Time First (SRTF) scheduler with support for
-    patterns composed of ("CPU", t) and ("BLOCK", t) segments.
-
-    Guarantees:
-    - BLOCK segments are represented as ExecSlice("{name}_BLOCK", start, end).
-    - A process in BLOCK is never present in the ready set.
-    - Time advances to next relevant event when nothing is ready.
-    - Deterministic tie-breaks: (remaining, arrival, input order).
+    Deterministic preemptive Shortest Remaining Time First (SRTF) scheduler.
+    Reglas de diseño (buscadas para reproducibilidad y coincidencia con trazas
+    académicas estrictas):
+    - Eventos procesados en este orden en cada instante t:
+      1) se liberan procesos bloqueados cuyo unblock_time <= t,
+      2) se aceptan todas las llegadas con arrival <= t,
+      3) se decide el siguiente proceso a ejecutar en ready (si hay).
+    - La métrica de selección es el tiempo CPU total restante (suma de todos
+      los tramos CPU pendientes). En caso de empate se aplica orden por llegada
+      (arrival menor), luego por orden de entrada en la lista 'processes'.
+    - Si un nuevo proceso llega exactamente en t y su remanente es menor que el
+      remanente del activo, se preemite inmediatamente (es decir, preempción en
+      el punto temporal exacto).
+    - Un tramo BLOCK nunca se inicia hasta que el tramo CPU anterior haya sido
+      completado. Cuando un proceso entra en BLOCK se marca su desbloqueo y no
+      está en ready hasta entonces.
+    - Se representan los tramos BLOCK como ExecSlice("{name}_BLOCK", start, end).
+    - Se evita avanzar el reloj mientras existan listos; el reloj avanza al próximo
+      evento (llegada futura o unblock) solo cuando ready está vacío.
     """
 
     def schedule(self, processes: List[Process], quantum: Optional[int] = None) -> ScheduleResult:
         if not processes:
             return ScheduleResult()
 
-        # Prepare structures
+        # Normalizar patrones y construir estructuras iniciales
         patterns: Dict[str, List[Tuple[str, int]]] = {
             p.name: (p.pattern.copy() if p.pattern else [("CPU", p.burst)]) for p in processes
         }
@@ -26,10 +37,11 @@ class SRTF(SchedulerStrategy):
         index_by_name = {p.name: i for i, p in enumerate(processes)}
         n = len(processes)
 
-        next_idx: Dict[str, int] = {p.name: 0 for p in processes}    # index into pattern
-        rem_cpu: Dict[str, int] = {}                                 # remaining for current CPU segment
-        blocked_until: Dict[str, int] = {}                           # process -> unlock time
-        ready: List[str] = []                                        # names of ready processes
+        # Estado por proceso
+        next_idx: Dict[str, int] = {p.name: 0 for p in processes}    # índice dentro del patrón
+        rem_cpu_seg: Dict[str, int] = {}                             # remanente del tramo CPU en curso
+        blocked_until: Dict[str, int] = {}                           # proceso -> tiempo de desbloqueo
+        ready: List[str] = []                                        # lista de nombres listos
         timeline: List[ExecSlice] = []
         per_proc: Dict[str, List[Tuple[int, int]]] = {p.name: [] for p in processes}
         completion: Dict[str, int] = {}
@@ -40,114 +52,128 @@ class SRTF(SchedulerStrategy):
             pat = patterns[name]
             return pat[i] if i < len(pat) else None
 
-        def make_ready(name: str, t: int):
-            """Put process into ready if it has a CPU segment; otherwise register block or completion."""
+        def total_cpu_remaining(name: str) -> int:
+            """Suma de todos los tramos CPU desde next_idx en adelante (incluye rem_cpu_seg)."""
+            pat = patterns[name]
+            idx = next_idx[name]
+            rem = 0
+            # si hay remanente del segmento actual, usarlo
+            if name in rem_cpu_seg:
+                rem += rem_cpu_seg[name]
+                idx += 1  # ya contamos el tramo actual
+            # sumar futuros tramos CPU
+            rem += sum(d for k, d in pat[idx:] if k == "CPU")
+            return rem
+
+        def make_ready_if_cpu(name: str, now: int):
+            """Pone en ready si el siguiente segmento es CPU; si es BLOCK lo registra."""
             if name in done or name in blocked_until:
                 return
             seg = curr_seg(name)
             if seg is None:
-                completion[name] = t
+                # completado
+                completion[name] = now
                 done.add(name)
-                rem_cpu.pop(name, None)
+                rem_cpu_seg.pop(name, None)
                 return
             kind, dur = seg
             if kind == "BLOCK":
-                # register block slice and advance
+                # iniciar bloqueos inmediatamente (no consumen CPU) y programar desbloqueo
                 if dur > 0:
-                    timeline.append(ExecSlice(f"{name}_BLOCK", t, t + dur))
-                blocked_until[name] = t + dur
+                    timeline.append(ExecSlice(f"{name}_BLOCK", now, now + dur))
+                blocked_until[name] = now + dur
                 next_idx[name] += 1
-                rem_cpu.pop(name, None)
+                rem_cpu_seg.pop(name, None)
                 return
             # CPU
-            if name not in rem_cpu:
-                rem_cpu[name] = dur
+            if name not in rem_cpu_seg:
+                rem_cpu_seg[name] = dur
             if name not in ready:
                 ready.append(name)
 
-        # Initialize time at earliest arrival
+        # Inicializar tiempo en la mínima llegada
         time = min(p.arrival for p in processes)
-        # Add initial arrivals (<= time)
+        # Aceptar llegadas iniciales y posibles bloques que comenzaran en t=time
         for p in processes:
             if p.arrival <= time:
-                make_ready(p.name, time)
+                make_ready_if_cpu(p.name, time)
 
-        # Helper to advance and process unblocks/arrivals at that time
-        def flush_events_at(t: int):
-            # unblocks
+        def process_unblocks_and_arrivals(t: int):
+            # 1) desbloqueos cuyo tiempo <= t
             for name in sorted(list(blocked_until), key=lambda k: blocked_until[k]):
                 if blocked_until[name] <= t:
-                    blocked_until.pop(name, None)
-                    make_ready(name, blocked_until.get(name, t))
-            # arrivals
+                    unblock_time = blocked_until.pop(name)
+                    make_ready_if_cpu(name, unblock_time)
+            # 2) llegadas con arrival <= t que aún no empezaron (next_idx==0)
             for p in processes:
                 if p.name in done or p.name in blocked_until:
                     continue
                 if next_idx[p.name] == 0 and arrivals[p.name] <= t and p.name not in ready:
-                    make_ready(p.name, t)
+                    make_ready_if_cpu(p.name, t)
 
-        def cpu_remaining_total(name: str) -> int:
-            """Suma de CPU restante desde next_idx en adelante (incluye todos los tramos CPU futuros)."""
-            pat = patterns[name]
-            idx = next_idx[name]
-            return sum(d for k, d in pat[idx:] if k == "CPU")
+        def next_future_event_after(t: int) -> Optional[int]:
+            events = []
+            # próximas llegadas de procesos no iniciados
+            for p in processes:
+                if p.name in done or p.name in blocked_until:
+                    continue
+                if next_idx[p.name] == 0 and arrivals[p.name] > t:
+                    events.append(arrivals[p.name])
+            # próximos desbloqueos
+            events.extend(v for v in blocked_until.values() if v > t)
+            return min(events) if events else None
 
+        # Bucle principal
         while len(done) < n:
-            # Unblock and process arrivals at current time
-            flush_events_at(time)
+            # Procesar desbloqueos y llegadas exactamente en 'time' (orden: unblocks then arrivals)
+            process_unblocks_and_arrivals(time)
 
-            # If nothing ready, jump to next event (arrival or unblock)
+            # Si no hay listos, saltamos al siguiente evento relevante
             if not ready:
-                future = []
-                # future arrivals for processes not yet started
-                for p in processes:
-                    if p.name in done or p.name in blocked_until:
-                        continue
-                    if next_idx[p.name] == 0 and arrivals[p.name] > time:
-                        future.append(arrivals[p.name])
-                # future unblocks
-                future.extend(t for t in blocked_until.values() if t > time)
-                if not future:
+                t_next = next_future_event_after(time)
+                if t_next is None:
+                    # puede haber procesos que ya terminaron o estamos al final
                     break
-                time = min(future)
-                flush_events_at(time)
+                time = t_next
+                process_unblocks_and_arrivals(time)
                 continue
 
-            # Choose process with least total remaining CPU (deterministic tie-break)
-            def key(nm: str):
-                return (cpu_remaining_total(nm), arrivals[nm], index_by_name[nm])
-            ready.sort(key=key)
+            # Selección determinista: ordenar ready por (total_remaining, arrival, input_order)
+            ready.sort(key=lambda nm: (total_cpu_remaining(nm), arrivals[nm], index_by_name[nm]))
             active = ready.pop(0)
 
-            # Defensive: verify active still has a CPU segment
+            # Validación: si el siguiente segmento no es CPU, tratarlo (race)
             seg = curr_seg(active)
             if seg is None:
                 completion[active] = time
                 done.add(active)
-                rem_cpu.pop(active, None)
+                rem_cpu_seg.pop(active, None)
                 continue
             kind, _ = seg
             if kind != "CPU":
-                # If next is BLOCK (race), handle it and continue loop
-                make_ready(active, time)
+                # si por alguna razón el siguiente es BLOCK, procesarlo
+                make_ready_if_cpu(active, time)
                 continue
 
-            # Determine next possible preemption event
-            seg_remaining = rem_cpu.get(active, 0)
-            if seg_remaining <= 0:
-                # defensive: nothing to run
+            # Calcular próximo evento que puede preemptar al activo:
+            # - llegada futura de proceso no iniciado (arrival > time)
+            # - desbloqueo futuro (blocked_until)
+            seg_rem = rem_cpu_seg.get(active, 0)
+            if seg_rem <= 0:
+                # nada que correr (defensa)
                 continue
 
-            # Next arrival of a not-yet-started process
-            next_arrival = min(
-                (arrivals[p.name] for p in processes
-                 if p.name not in done and p.name not in blocked_until and next_idx[p.name] == 0 and arrivals[p.name] > time),
-                default=None
-            )
-            # Next unblock time
-            next_unblock = min((t for t in blocked_until.values() if t > time), default=None)
-            seg_end = time + seg_remaining
+            # Próxima llegada de procesos no iniciados
+            next_arrival_times = [
+                arrivals[p.name] for p in processes
+                if p.name not in done and p.name not in blocked_until and next_idx[p.name] == 0 and arrivals[p.name] > time
+            ]
+            next_arrival = min(next_arrival_times) if next_arrival_times else None
+            # Próximo desbloqueo
+            next_unblock_times = [t for t in blocked_until.values() if t > time]
+            next_unblock = min(next_unblock_times) if next_unblock_times else None
 
+            seg_end = time + seg_rem
             candidates = [seg_end]
             if next_arrival is not None:
                 candidates.append(next_arrival)
@@ -155,53 +181,57 @@ class SRTF(SchedulerStrategy):
                 candidates.append(next_unblock)
             t_next = min(candidates)
 
-            # Append execution slice [time, t_next)
+            # Ejecutar desde time hasta t_next (posible preempción en t_next)
             if t_next > time:
                 timeline.append(ExecSlice(active, time, t_next))
                 per_proc[active].append((time, t_next))
                 run = t_next - time
-                rem_cpu[active] -= run
+                rem_cpu_seg[active] -= run
                 time = t_next
 
-            # Process events at the new time
-            flush_events_at(time)
+            # En el instante 'time' procesamos primero desbloqueos y llegadas
+            process_unblocks_and_arrivals(time)
 
-            # If current CPU segment finished, consume it and react
-            if rem_cpu.get(active, 0) == 0:
-                # consume CPU segment
+            # Si el segmento CPU actual terminó exactamente en 'time'
+            if rem_cpu_seg.get(active, 0) == 0:
+                # consumir el segmento actual (avanzar índice)
                 seg_now = curr_seg(active)
                 if seg_now and seg_now[0] == "CPU":
                     next_idx[active] += 1
+                # Ver el siguiente segmento después de consumir
                 nxt = curr_seg(active)
                 if nxt is None:
                     completion[active] = time
                     done.add(active)
-                    rem_cpu.pop(active, None)
+                    rem_cpu_seg.pop(active, None)
                 else:
                     if nxt[0] == "BLOCK":
+                        # iniciar bloqueo inmediatamente
                         bdur = nxt[1]
                         if bdur > 0:
                             timeline.append(ExecSlice(f"{active}_BLOCK", time, time + bdur))
                         blocked_until[active] = time + bdur
                         next_idx[active] += 1
-                        rem_cpu.pop(active, None)
+                        rem_cpu_seg.pop(active, None)
                     else:
-                        # next is CPU: initialize its remaining and requeue
-                        rem_cpu[active] = nxt[1]
+                        # siguiente es CPU: inicializar remanente y volver a ready
+                        rem_cpu_seg[active] = nxt[1]
                         if active not in ready and active not in blocked_until and active not in done:
                             ready.append(active)
             else:
-                # still has remaining on current CPU segment -> preempted by event
+                # Aún queda remanente: fue preemptado en 'time'. Reencolar respetando orden determinista.
                 if active not in ready and active not in blocked_until and active not in done:
                     ready.append(active)
 
-        # Compute metrics
+            # Nota: al reentrar al while se procesarán desbloqueos/arrivas en el mismo 'time' antes de decidir.
+
+        # Cálculo de métricas finales (turnaround y waiting)
         turnaround: Dict[str, int] = {}
         waiting: Dict[str, int] = {}
         for p in processes:
-            orig_pat = p.pattern if p.pattern else patterns[p.name]
-            total_cpu = sum(d for k, d in (orig_pat or []) if k == "CPU")
-            total_block = sum(d for k, d in (orig_pat or []) if k == "BLOCK")
+            pat = patterns[p.name]
+            total_cpu = sum(d for k, d in pat if k == "CPU")
+            total_block = sum(d for k, d in pat if k == "BLOCK")
             fin = completion.get(p.name, time)
             tr = fin - p.arrival
             te = tr - total_cpu - total_block
