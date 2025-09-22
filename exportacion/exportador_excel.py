@@ -3,13 +3,17 @@ from typing import List, Dict, Tuple, Optional, Any
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
 from openpyxl.utils import get_column_letter
-from ..core.models import ScheduleResult, Process, ExecSlice
+from ..core.models import ScheduleResult, Process
 
 class ExportadorExcel:
     # =============== Utilidades internas para tablas =================
     def _escribir_tabla(self, ws, filas: List[Any]):
         if not filas:
             return
+
+        thin = Side(style="thin", color="000000")
+        border_thin = Border(top=thin, bottom=thin, left=thin, right=thin)
+
         primera = filas[0]
         if isinstance(primera, dict):
             headers = list(primera.keys())
@@ -19,6 +23,32 @@ class ExportadorExcel:
         else:
             for fila in filas:
                 ws.append(list(fila))
+
+        # Aplicar bordes a todas las celdas con datos
+        for row in ws.iter_rows(
+            min_row=1,
+            max_row=ws.max_row,
+            min_col=1,
+            max_col=ws.max_column
+        ):
+            for cell in row:
+                cell.border = border_thin
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Aplicar bordes y alineación
+        for row in ws.iter_rows(
+            min_row=1,
+            max_row=ws.max_row,
+            min_col=1,
+            max_col=ws.max_column
+        ):
+            for cell in row:
+                cell.border = border_thin
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                # Negrita si es fila de resumen
+                if str(cell.value).strip().upper() in ("PROMEDIO", "TOTAL CPU"):
+                    cell.font = Font(bold=True)
 
     def _auto_ajustar_ancho(self, ws):
         for col in ws.columns:
@@ -175,7 +205,6 @@ class ExportadorExcel:
                 cell = ws.cell(row=r, column=c)
                 cell.border = border_thin
                 cell.alignment = Alignment(horizontal="center", vertical="center")
-
 
         # --- Eje de tiempo ---
         if tiempo_total >= 0:

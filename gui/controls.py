@@ -172,23 +172,42 @@ class ControlsFrame(ctk.CTkFrame):
         try:
             exp = ExportadorExcel()
             exp.exportar_con_gantt(
-                ruta,
-                resultado=self.app._last_schedule_result,
-                opciones={"color_cpu_por_pid": self.app._last_colors},
-                procesos=self.app._last_processes,
-                hojas=[
-                    ("Procesos", [
-                        {"Proceso": p.name, "Llegada": p.arrival, "Burst": p.burst, "Patrón": str(p.pattern)}
+            ruta,
+            resultado=self.app._last_schedule_result,
+            opciones={"color_cpu_por_pid": self.app._last_colors},
+            procesos=self.app._last_processes,
+            hojas=[
+                # ======= Hoja Procesos =======
+                ("Procesos", (lambda: [
+                    *[
+                        {"Proceso": p.name,
+                        "Llegada": p.arrival,
+                        "Burst": p.burst,
+                        "Patrón": str(p.pattern)}
                         for p in self.app._last_processes
-                    ]),
-                    ("Métricas", [
+                    ],
+                    # Fila extra con la suma total de CPU
+                    {"Proceso": "TOTAL CPU",
+                    "Llegada": "",
+                    "Burst": sum(p.burst for p in self.app._last_processes),
+                    "Patrón": ""}
+                ])()),
+
+                # ======= Hoja Métricas =======
+                ("Métricas", (lambda: [
+                    *[
                         {"Proceso": pid,
                         "Turnaround": self.app._last_schedule_result.turnaround.get(pid, ""),
                         "Waiting": self.app._last_schedule_result.waiting.get(pid, "")}
                         for pid in self.app._last_schedule_result.turnaround.keys()
-                    ])
-                ]
-            )
+                    ],
+                    # Fila extra con promedios
+                    {"Proceso": "PROMEDIO",
+                    "Turnaround": round(self.app._last_schedule_result.avg_turnaround, 2),
+                    "Waiting": round(self.app._last_schedule_result.avg_waiting, 2)}
+                ])())
+            ]
+        )
 
             CTkMessagebox(
                 title="Éxito",
