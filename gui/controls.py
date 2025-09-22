@@ -1,7 +1,10 @@
+# app/gui/controls.py
 from CTkMessagebox import CTkMessagebox
 import customtkinter as ctk
 import string
 import random
+import os
+from ..exportacion.exportador_excel import ExportadorExcel
 
 class ControlsFrame(ctk.CTkFrame):
     def __init__(self, master, algorithms, on_calculate, on_reset, app):
@@ -50,7 +53,7 @@ class ControlsFrame(ctk.CTkFrame):
     def _show_actions_menu(self):
         popup = ctk.CTkToplevel(self)
         popup.title("Acciones")
-        popup.geometry("260x140")
+        popup.geometry("260x165")
         popup.resizable(False, False)
         popup.transient(self)
         popup.grab_set()
@@ -62,13 +65,41 @@ class ControlsFrame(ctk.CTkFrame):
         popup.geometry(f"+{x}+{y}")
 
         ctk.CTkLabel(popup, text="Selecciona una acción:", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(10, 5))
-        ctk.CTkButton(popup, text="Nombrar procesos alfabéticamente",
-                      command=lambda: [self._rename_processes(), popup.destroy()]).pack(pady=5)
-        ctk.CTkButton(popup, text="Randomizar tiempos y patrones",
-                      command=lambda: [self._randomize_processes(), popup.destroy()]).pack(pady=5)
-        
-        popup.after(110, lambda: popup.iconbitmap(self.app.icon_path))
 
+        def _action_then_close(fn):
+            def wrapper():
+                try:
+                    try:
+                        popup.grab_release()
+                    except Exception:
+                        pass
+                    fn()
+                    try:
+                        if self.master and hasattr(self.master, "focus_force"):
+                            self.master.focus_force()
+                        elif self.master and hasattr(self.master, "focus_set"):
+                            self.master.focus_set()
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        if popup.winfo_exists():
+                            popup.after(80, lambda: popup.destroy() if popup.winfo_exists() else None)
+                    except Exception:
+                        pass
+            return wrapper
+
+        ctk.CTkButton(popup, text="Nombrar procesos alfabéticamente",
+                      command=_action_then_close(self._rename_processes)).pack(pady=5)
+        ctk.CTkButton(popup, text="Randomizar tiempos y patrones",
+                      command=_action_then_close(self._randomize_processes)).pack(pady=5)
+        ctk.CTkButton(popup, text="Exportar a Excel", command=_action_then_close(self._export_excel)).pack(pady=5)
+
+        try:
+            if popup.winfo_exists():
+                popup.iconbitmap(self.app.icon_path)
+        except Exception:
+            pass
 
     def _rename_processes(self):
         if hasattr(self.master, "table"):
@@ -77,12 +108,10 @@ class ControlsFrame(ctk.CTkFrame):
                 name_entry.insert(0, string.ascii_uppercase[i % 26])
 
     def _randomize_processes(self):
-        # Randomiza llegada y patrón simple: ej. "a,(b),c" con valores chicos
         if hasattr(self.master, "table"):
             for (_name, arrival_frame, pattern_entry, *_rest) in self.master.table.rows:
                 arrival_frame.entry.delete(0, "end")
                 arrival_frame.entry.insert(0, str(random.randint(0, 5)))
-                # patrón: CPU 1-5, opcional bloqueo 0-3, luego CPU 1-5
                 a = random.randint(1, 5)
                 b = random.randint(0, 3)
                 c = random.randint(1, 5)
@@ -94,16 +123,15 @@ class ControlsFrame(ctk.CTkFrame):
         if value == "Round Robin":
             self.quantum_entry.configure(
                 state="normal",
-                fg_color="#FFFFFF",     # fondo blanco
-                text_color="#000000"    # texto negro
+                fg_color="#FFFFFF",
+                text_color="#000000"
             )
         else:
             self.quantum_entry.configure(
                 state="disabled",
-                fg_color="#A9A9A9",     # gris oscuro
-                text_color="#555555"    # texto gris
+                fg_color="#A9A9A9",
+                text_color="#555555"
             )
-
 
     def _on_fullscreen(self):
         self.app.show_fullscreen_gantt()
@@ -126,3 +154,50 @@ class ControlsFrame(ctk.CTkFrame):
                 icon="cancel"
             )
             return None
+        
+    def _export_excel(self):
+        if not hasattr(self.app, "_last_schedule_result") or not self.app._last_schedule_result:
+            CTkMessagebox(title="Aviso", message="Primero debes calcular antes de exportar.", icon="info")
+            return
+
+        from tkinter import filedialog
+        ruta = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Archivos Excel", "*.xlsx")],
+            title="Guardar como..."
+        )
+        if not ruta:
+            return
+
+        try:
+            exp = ExportadorExcel()
+            exp.exportar_con_gantt(
+                ruta,
+                resultado=self.app._last_schedule_result,
+                opciones={"color_cpu_por_pid": self.app._last_colors},
+                procesos=self.app._last_processes,
+                hojas=[
+                    ("Procesos", [
+                        {"Proceso": p.name, "Llegada": p.arrival, "Burst": p.burst, "Patrón": str(p.pattern)}
+                        for p in self.app._last_processes
+                    ]),
+                    ("Métricas", [
+                        {"Proceso": pid,
+                        "Turnaround": self.app._last_schedule_result.turnaround.get(pid, ""),
+                        "Waiting": self.app._last_schedule_result.waiting.get(pid, "")}
+                        for pid in self.app._last_schedule_result.turnaround.keys()
+                    ])
+                ]
+            )
+
+            CTkMessagebox(
+                title="Éxito",
+                message=f"Exportación completada.\nArchivo guardado en:\n{os.path.abspath(ruta)}",
+                icon="check"
+            )
+
+        except Exception as e:
+            CTkMessagebox(title="Error", message=f"No se pudo exportar: {e}", icon="cancel")
+
+
+    

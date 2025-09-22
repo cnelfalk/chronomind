@@ -11,7 +11,7 @@ import os
 class SchedulerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Planificación de procesos")
+        self.title("Chronomind")
 
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -134,8 +134,42 @@ class SchedulerApp(ctk.CTk):
                 pattern=pattern
             ))
 
-        color_map = {row["name"]: row["color"] for row in data}
-        self.gantt.set_colors(color_map)
+        def normalize_color(c: str) -> str:
+            # Quitar "#", asegurar ARGB
+            if c.startswith("#"):
+                hexval = c[1:]
+            else:
+                hexval = c
+            if len(hexval) == 6:
+                return "FF" + hexval.upper()  # Alpha = FF (opaco)
+            return hexval.upper()
+
+        # Mapa para Matplotlib (usa #RRGGBB)
+        gantt_colors = {}
+        # Mapa para Excel (usa FFRRGGBB)
+        excel_colors = {}
+
+        for row in data:
+            raw = row["color"]
+            if raw.startswith("#"):
+                hexval = raw[1:]
+            else:
+                hexval = raw
+
+            if len(hexval) == 6:
+                gantt_colors[row["name"]] = "#" + hexval.upper()
+                excel_colors[row["name"]] = "FF" + hexval.upper()
+            else:
+                # fallback
+                gantt_colors[row["name"]] = "#1F77B4"
+                excel_colors[row["name"]] = "FF1F77B4"
+
+        # Colores para el gráfico
+        self.gantt.set_colors(gantt_colors)
+
+        # Colores para exportación a Excel
+        self._last_colors = excel_colors
+
 
         algo = self.controls.get_algorithm()
         quantum = self.controls.get_quantum()
@@ -145,6 +179,10 @@ class SchedulerApp(ctk.CTk):
         strategy = SchedulerFactory.create(algo)
         try:
             result = strategy.schedule(processes, quantum=quantum)
+
+            # --- AÑADIR: guardar último resultado y procesos para exportación ---
+            self._last_schedule_result = result
+            self._last_processes = processes
 
             def orden_cpu(timeline):
                 seq = []
