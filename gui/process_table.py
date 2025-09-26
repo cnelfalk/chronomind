@@ -1,3 +1,5 @@
+# app/gui/process_table.py
+
 import re
 import customtkinter as ctk
 from ..utils import DualScrollFrame
@@ -31,8 +33,16 @@ class ProcessTable(ctk.CTkFrame):
 
         headers = ["Proceso", "Tiempo de llegada", "Tiempo de ejecución"]
         for i, text in enumerate(headers):
-            ctk.CTkLabel(container, text=text, font=ctk.CTkFont(weight="bold")).grid(
-                row=0, column=i, padx=(10 if i == 0 else 20), pady=(5, 0), sticky="ew"
+            ctk.CTkLabel(
+                container,
+                text=text,
+                font=ctk.CTkFont(weight="bold")
+            ).grid(
+                row=0,
+                column=i,
+                padx=(10 if i == 0 else 20),
+                pady=(5, 0),
+                sticky="ew"
             )
 
         self.set_rows(initial_rows)
@@ -47,33 +57,53 @@ class ProcessTable(ctk.CTkFrame):
                 "pattern_raw": pattern_entry.get()
             })
 
+        # Eliminar filas extra
         for i in range(len(self.rows)):
             if i >= count:
                 for w in self.rows[i]:
                     w.destroy()
-
         self.rows = self.rows[:count]
 
+        # Crear nuevas filas
         for i in range(len(self.rows), count):
             container = self.content_frame
             container.grid_columnconfigure(3, weight=0)
 
             name = ctk.CTkEntry(container, width=160)
             arr = self._create_spinbox_field(container, i+1, 1, default_val=0, min_val=0)
-            pattern_entry = ctk.CTkEntry(container, width=220, placeholder_text="Ej: 3,(2),4")
+            pattern_entry = ctk.CTkEntry(
+                container,
+                width=220,
+                placeholder_text="Ej: 3,(2),4"
+            )
 
             name.grid(row=i+1, column=0, padx=(12, 12), pady=4, sticky="nsew")
             arr.grid(row=i+1, column=1, padx=(8, 12), pady=4, sticky="nsew")
             pattern_entry.grid(row=i+1, column=2, padx=(8, 12), pady=4, sticky="nsew")
 
+            # Autocompletado de paréntesis: al teclear "(", insertar ")" automáticamente
+            def _auto_close_paren(event):
+                if event.char == "(":
+                    entry = event.widget
+                    # posición actual de inserción (después del "(")
+                    pos = entry.index("insert")
+                    entry.insert(pos, ")")
+                    entry.icursor(pos)
+            pattern_entry.bind("<KeyRelease>", _auto_close_paren)
+
+            # Botón para elegir color
             def choose_color(index, btn):
-                color = tkinter.colorchooser.askcolor(title=f"Color para proceso {index+1}")[1]
+                color = tkinter.colorchooser.askcolor(
+                    title=f"Color para proceso {index+1}"
+                )[1]
                 if color:
                     self._color_by_index[index] = color
                     btn.configure(fg_color=color)
 
             color_btn = ctk.CTkButton(container, text="🎨", width=36)
-            color_btn.configure(command=lambda idx=i, btn=color_btn: choose_color(idx, btn))
+            color_btn.configure(
+                command=lambda idx=i, btn=color_btn: choose_color(idx, btn)
+            )
             color_btn.grid(row=i+1, column=3, padx=(4, 12), pady=4)
 
             default_color = self._palette[i % len(self._palette)]
@@ -82,16 +112,23 @@ class ProcessTable(ctk.CTkFrame):
 
             self.rows.append((name, arr, pattern_entry, color_btn))
 
+        # Restaurar datos previos o valores por defecto
         for i, row in enumerate(self.rows):
             name, arr, pattern_entry, _ = row
             if i < len(current_data):
-                name.delete(0, "end"); name.insert(0, current_data[i]["name"])
-                arr.entry.delete(0, "end"); arr.entry.insert(0, current_data[i]["arrival"])
-                pattern_entry.delete(0, "end"); pattern_entry.insert(0, current_data[i]["pattern_raw"])
+                name.delete(0, "end")
+                name.insert(0, current_data[i]["name"])
+                arr.entry.delete(0, "end")
+                arr.entry.insert(0, current_data[i]["arrival"])
+                pattern_entry.delete(0, "end")
+                pattern_entry.insert(0, current_data[i]["pattern_raw"])
             else:
-                name.delete(0, "end"); name.insert(0, f"P{i+1}")
-                arr.entry.delete(0, "end"); arr.entry.insert(0, "0")
-                pattern_entry.delete(0, "end"); pattern_entry.insert(0, "")
+                name.delete(0, "end")
+                name.insert(0, f"P{i+1}")
+                arr.entry.delete(0, "end")
+                arr.entry.insert(0, "0")
+                pattern_entry.delete(0, "end")
+                pattern_entry.insert(0, "")
 
     def _create_spinbox_field(self, container, row, col, default_val, min_val=0, max_val=999):
         outer_frame = ctk.CTkFrame(container)
@@ -111,7 +148,10 @@ class ProcessTable(ctk.CTkFrame):
                 entry.delete(0, "end")
                 entry.insert(0, str(default_val))
 
-        minus_btn = ctk.CTkButton(inner_frame, text="–", width=28, height=28, command=lambda: adjust(entry, -1))
+        minus_btn = ctk.CTkButton(
+            inner_frame, text="–", width=28, height=28,
+            command=lambda: adjust(entry, -1)
+        )
         minus_btn.grid(row=0, column=0, padx=(0, 4))
 
         entry = ctk.CTkEntry(inner_frame)
@@ -119,7 +159,10 @@ class ProcessTable(ctk.CTkFrame):
         entry.grid(row=0, column=1, sticky="ew")
         entry.insert(0, str(default_val))
 
-        plus_btn = ctk.CTkButton(inner_frame, text="+", width=28, height=28, command=lambda: adjust(entry, 1))
+        plus_btn = ctk.CTkButton(
+            inner_frame, text="+", width=28, height=28,
+            command=lambda: adjust(entry, 1)
+        )
         plus_btn.grid(row=0, column=2, padx=(4, 0))
 
         outer_frame.entry = entry
@@ -171,6 +214,9 @@ class ProcessTable(ctk.CTkFrame):
 
     def reset(self):
         for i, (name, arr, pattern_entry, _) in enumerate(self.rows):
-            name.delete(0, "end"); name.insert(0, f"P{i+1}")
-            arr.entry.delete(0, "end"); arr.entry.insert(0, "0")
-            pattern_entry.delete(0, "end"); pattern_entry.insert(0, "")
+            name.delete(0, "end")
+            name.insert(0, f"P{i+1}")
+            arr.entry.delete(0, "end")
+            arr.entry.insert(0, "0")
+            pattern_entry.delete(0, "end")
+            pattern_entry.insert(0, "")
