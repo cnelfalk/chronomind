@@ -6,33 +6,52 @@ Simulador gráfico de algoritmos de planificación de procesos, orientado a ense
 
 ## Características
 
-- Interfaz gráfica con `customtkinter`
-- Algoritmos disponibles:
-  - FIFO
-  - SJF
-  - SRTF (preemptivo)
-  - Round Robin (quantum configurable)
-- Ingreso flexible de patrones: `3,(2),4` representa CPU 3 → BLOQUEO 2 → CPU 4
-- Visualización dinámica del diagrama de Gantt
-- Cálculo automático de métricas por proceso:
-  - Tiempo de Espera (TE)
-  - Tiempo de Retorno (TR)
-  - Promedios globales
+- Interfaz gráfica basada en CustomTkinter  
+- Cuatro estrategias de planificación  
+  - FIFO (no preemptivo)  
+  - SJF (no preemptivo, shortest job first)  
+  - SRTF (preemptivo, shortest remaining time first)  
+  - Round Robin con quantum configurable  
+- Ingreso de patrones en formato flexible  
+  Ejemplo: `3,(2),4` representa CPU 3 → BLOQUEO 2 → CPU 4  
+- Diagrama de Gantt interactivo con zoom y pan  
+- Cálculo automático de métricas por proceso  
+  - Tiempo de Retorno (TR)  
+  - Tiempo de Espera (TE)  
+  - Promedios globales  
+- Acciones rápidas desde la interfaz  
+  - Renombrar procesos en orden alfabético  
+  - Randomizar tiempos y patrones  
+  - Exportar resultados a Excel  
+- Tema visual personalizable mediante `sistema_theme.json`  
+- **Instalador nativo solo para Windows**, crea acceso directo y registra el comando `chronomind`. Incluye un intérprete Python portable y todas las dependencias, por lo que el usuario NO necesita tener Python ni librerías instaladas.
 
-- Acciones rápidas:
-  - Nombrado alfabético
-  - Randomización de tiempos y patrones
-- Tema visual personalizable (`sistema_theme.json`)
-  
+---
+
 ## Requisitos
 
-- Python 3.10+
-- Paquetes:
-  - `customtkinter`
-  - `tkinter` (incluido en la mayoría de distribuciones)
-  - `random`, `math`, `datetime` (estándar)
+- Para la versión instalada en Windows: **no se requiere Python ni pip**.  
+- Para ejecutar desde código o en Linux:  
+  - Python 3.10 o superior  
+  - Paquetes de Python:
+    ```bash
+    pip install customtkinter matplotlib openpyxl CTkMessagebox
+    ```
 
-## Ejecución
+---
 
-```bash
-python main.py
+## Instalación en Windows
+
+1. Descarga el instalador `.exe` desde la última release.  
+2. Ejecuta el instalador y sigue los pasos del asistente.  
+3. Se creará un acceso directo en el Menú Inicio y se registrará el comando `chronomind` en la terminal.  
+
+> Para desinstalar, usa el panel de “Agregar o quitar programas” de Windows.
+
+---
+
+## Uso
+
+- Desde el Menú Inicio o en la terminal de Windows:
+  ```bash
+  chronomind
